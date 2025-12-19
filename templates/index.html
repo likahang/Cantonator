@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>廣東話粗口生成器 (Powered by Gemini 3 Flash)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
+            color: #ecf0f1;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 40px 20px;
+            position: relative; /* 確保偽元素定位正確 */
+        }
+        /* 背景圖片層 (模糊效果) */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('/images/background.png');
+            background-size: cover;
+            background-position: center;
+            filter: blur(10px); /* 模糊程度 */
+            transform: scale(1.1); /* 稍微放大以消除模糊邊緣的白邊 */
+            z-index: -2;
+        }
+        /* 深色遮罩層 (確保文字清晰) */
+        body::after {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: transparent;
+            z-index: -1;
+        }
+        .container {
+            background-color: rgba(52, 73, 94, 0.5);
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+            grid-column: 2;
+        }
+        h1 {
+            color: #e74c3c;
+            margin-bottom: 0.5rem;
+        }
+        p.subtitle {
+            color: #bdc3c7;
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 15px;
+            border: 2px solid #7f8c8d;
+            background-color: rgba(255, 255, 255, 0.25); /* 增加不透明度，讓輸入框更清晰 */
+            color: #ecf0f1; /* 文字改為淺色以利閱讀 */
+            border-radius: 10px;
+            font-size: 1.3rem;
+            resize: vertical;
+            box-sizing: border-box;
+            margin-bottom: 1.5rem;
+            transition: all 0.3s;
+        }
+        textarea:focus {
+            border-color: #e74c3c;
+            outline: none;
+            box-shadow: 0 0 10px rgba(231, 76, 60, 0.3);
+        }
+        textarea::placeholder {
+            color: rgba(236, 240, 241, 0.8); /* 提高提示文字的亮度與不透明度 */
+            font-style: italic; /* 加一點斜體區分提示詞與輸入內容 */
+        }
+        button {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.1s, background-color 0.3s;
+            font-weight: bold;
+            box-shadow: 0 4px 0 #c0392b;
+        }
+        button:hover {
+            background-color: #ff6b6b;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 0 #c0392b;
+        }
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 0 0 #c0392b;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            box-shadow: none;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .loading {
+            display: none;
+            margin-top: 15px;
+            color: #f1c40f;
+            font-weight: bold;
+        }
+
+        /* 新增佈局與歷史紀錄樣式 */
+        .wrapper {
+            display: grid;
+            grid-template-columns: 1fr 600px 1fr;
+            gap: 30px;
+            width: 100%;
+            align-items: start;
+        }
+
+        .history-column {
+            grid-column: 3;
+            width: 300px;
+            justify-self: start;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .history-title {
+            color: #bdc3c7;
+            font-size: 1.1rem;
+            text-align: center;
+            margin-bottom: 5px;
+        }
+
+        #historyList {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .history-card {
+            background-color: rgba(52, 73, 94, 0.5);
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            text-align: left;
+            border: 1px solid #465c71;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .history-content {
+            color: #ecf0f1;
+            margin-bottom: 10px;
+            font-size: 0.95rem;
+            line-height: 1.4;
+            word-break: break-all;
+        }
+
+        .history-meta {
+            color: #95a5a6;
+            font-size: 0.8rem;
+            text-align: right;
+            border-top: 1px solid #465c71;
+            padding-top: 8px;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @media (max-width: 1000px) {
+            .wrapper {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+            .history-column {
+                width: 100%;
+                max-width: 600px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+    <div class="container">
+        <h1>🤬 廣東話粗口製造機</h1>
+        <p class="subtitle">Powered by Gemini 3 Flash (2025)</p>
+        
+        <textarea id="inputText" placeholder="輸入句子，例如：你好聰明啊"></textarea>
+        
+        <br>
+        
+        <button id="insertBtn" onclick="addProfanity()">增加粗口 ⚡</button>
+        
+        <div class="loading" id="loadingMsg">Gemini 3 正在運算中...</div>
+    </div>
+
+    <div class="history-column">
+        <div class="history-title">📜 歷史紀錄</div>
+        <div id="historyList">
+            <!-- 歷史卡片會顯示在這裡 -->
+        </div>
+    </div>
+</div>
+
+<script>
+    async function addProfanity() {
+        const textArea = document.getElementById('inputText');
+        const btn = document.getElementById('insertBtn');
+        const loading = document.getElementById('loadingMsg');
+        const originalText = textArea.value;
+
+        if (!originalText.trim()) {
+            alert("請先輸入文字！");
+            return;
+        }
+
+        btn.disabled = true;
+        loading.style.display = 'block';
+
+        try {
+            const response = await fetch('/insert_profanity', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ text: originalText }),
+            });
+
+            const data = await response.json();
+
+            if (data.result) {
+                addHistoryCard(originalText); // 將舊版本加入歷史紀錄
+                textArea.value = data.result;
+            } else if (data.error) {
+                alert("錯誤: " + data.error);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert("發生錯誤，請檢查網絡或 API Key");
+        } finally {
+            btn.disabled = false;
+            loading.style.display = 'none';
+            // 自動聚焦回輸入框，方便用戶連續點擊
+            textArea.focus();
+        }
+    }
+
+    function addHistoryCard(text) {
+        const list = document.getElementById('historyList');
+        const card = document.createElement('div');
+        card.className = 'history-card';
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'history-content';
+        contentDiv.textContent = text; // 使用 textContent 防止 XSS
+        
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'history-meta';
+        metaDiv.textContent = `字數: ${text.length}`;
+        
+        card.appendChild(contentDiv);
+        card.appendChild(metaDiv);
+        
+        list.prepend(card); // 新的卡片加在最上面
+    }
+</script>
+
+</body>
+</html>
