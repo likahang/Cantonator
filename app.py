@@ -43,9 +43,15 @@ model = genai.GenerativeModel(
     safety_settings=safety_settings
 )
 
+
 @app.route('/')
 def index():
     return render_template('index.html')
+
+# 讓 Flask 提供 style.css 靜態檔案
+@app.route('/templates/style.css')
+def serve_css():
+    return send_from_directory('templates', 'style.css')
 
 @app.route('/images/<path:filename>')
 def serve_image(filename):
