@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>廣東話粗口生成器 (Powered by Gemini 3 Flash)</title>
+    <title>廣東話粗口生成器 (Powered by Cloudflare Workers AI)</title>
     <link rel="stylesheet" href="/templates/style.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
 <div class="wrapper">
     <div class="container">
         <h1>廣東話粗口製造機</h1>
-        <p class="subtitle">Powered by Gemini 3 Flash (2025)</p>
+        <p class="subtitle">Powered by Cloudflare Workers AI · Gemma 4</p>
         
         <textarea id="inputText" placeholder="輸入句子，例如：你好聰明啊"></textarea>
         
@@ -64,7 +64,7 @@
             }
         } catch (error) {
             console.error('Error:', error);
-            alert("發生錯誤，請檢查網絡或 API Key");
+            alert("發生錯誤，請檢查網絡或 Cloudflare 設定");
         } finally {
             btn.disabled = false;
             loading.style.display = 'none';

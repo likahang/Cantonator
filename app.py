@@ -1,47 +1,94 @@
 import os
+import json
+from urllib import error, request as urllib_request
 from flask import Flask, render_template, request, jsonify, send_from_directory
-import google.generativeai as genai
 
 app = Flask(__name__)
+app.json.ensure_ascii = False
 
-# 設定你的 Google API Key
-# ⚠️ 安全警告：部署到 GitHub 時，切勿將真實的 API Key 硬編碼在程式碼中！
-# 請在部署平台 (如 Render, Railway, Heroku) 的 Environment Variables 中設定 GOOGLE_API_KEY
-api_key = os.environ.get("GOOGLE_API_KEY")
+CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN")
+CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
+CLOUDFLARE_MODEL = os.environ.get("CLOUDFLARE_MODEL", "@cf/google/gemma-4-26b-a4b-it")
 
-if not api_key:
-    # 本地測試時，如果沒有設定環境變數，請自行處理 (但不要 Commit 真實 Key 到 GitHub)
-    print("Warning: GOOGLE_API_KEY not found in environment variables.")
 
-genai.configure(api_key=api_key)
+def get_missing_config():
+    missing = []
+    if not CLOUDFLARE_API_TOKEN:
+        missing.append("CLOUDFLARE_API_TOKEN")
+    if not CLOUDFLARE_ACCOUNT_ID:
+        missing.append("CLOUDFLARE_ACCOUNT_ID")
+    return missing
 
-# 設定安全過濾器
-# 針對粗口生成應用，必須將過濾器設為 BLOCK_NONE，否則 API 會拒絕生成
-safety_settings = [
-    {
-        "category": "HARM_CATEGORY_HARASSMENT",
-        "threshold": "BLOCK_NONE"
-    },
-    {
-        "category": "HARM_CATEGORY_HATE_SPEECH",
-        "threshold": "BLOCK_NONE"
-    },
-    {
-        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        "threshold": "BLOCK_NONE"
-    },
-    {
-        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        "threshold": "BLOCK_NONE"
-    },
-]
 
-# 使用最新的 Gemini 3 Flash 模型
-# 更新日期：2025-12-18
-model = genai.GenerativeModel(
-    model_name='gemini-3-flash-preview',  # 更新為最新的模型名稱
-    safety_settings=safety_settings
-)
+missing_config = get_missing_config()
+if missing_config:
+    print(f"Warning: missing Cloudflare config: {', '.join(missing_config)}")
+
+
+def call_workers_ai(prompt):
+    missing = get_missing_config()
+    if missing:
+        raise RuntimeError(f"Missing environment variables: {', '.join(missing)}")
+
+    endpoint = (
+        "https://api.cloudflare.com/client/v4/accounts/"
+        f"{CLOUDFLARE_ACCOUNT_ID}/ai/v1/chat/completions"
+    )
+    payload = {
+        "model": CLOUDFLARE_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": "你係一個熟悉香港廣東話粗口語感嘅助手，輸出必須自然、口語、直接。",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+        "temperature": 1,
+        "max_completion_tokens": 300,
+        "chat_template_kwargs": {
+            "enable_thinking": False,
+        },
+    }
+    req = urllib_request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib_request.urlopen(req, timeout=60) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(details) from exc
+    except error.URLError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    choices = response_data.get("choices") or []
+    if not choices:
+        raise RuntimeError(json.dumps(response_data, ensure_ascii=False))
+
+    message = choices[0].get("message") or {}
+    content = message.get("content", "")
+    if isinstance(content, list):
+        text_parts = [item.get("text", "") for item in content if item.get("type") == "text"]
+        content = "".join(text_parts).strip()
+
+    if content:
+        return str(content).strip()
+
+    refusal = message.get("refusal")
+    if refusal:
+        return str(refusal).strip()
+
+    raise RuntimeError(json.dumps(response_data, ensure_ascii=False))
 
 
 @app.route('/')
@@ -67,7 +114,6 @@ def insert_profanity():
         return jsonify({'result': ''})
 
     # 建構 Prompt
-    # Gemini 3 Flash 對指令的理解能力更強，我們可以稍微精簡 Prompt，但保持核心規則
     prompt = f"""
     任務：將廣東話粗口（如：撚、鳩、柒、屌、仆街、含家鏟等）插入到用戶提供的句子中，並確保全句使用道地廣東話口語。
     
@@ -87,16 +133,11 @@ def insert_profanity():
     """
 
     try:
-        # Gemini 3 Flash 的回應速度極快，適合即時互動
-        response = model.generate_content(prompt)
-        
-        # 取得回應文字
-        modified_text = response.text.strip()
+        modified_text = call_workers_ai(prompt)
         return jsonify({'result': modified_text})
     except Exception as e:
         print(f"Error: {e}")
-        # 捕捉錯誤，例如 API Key 權限不足或模型名稱錯誤
-        return jsonify({'error': 'AI 處理失敗，請檢查 API Key 或網絡連線'}), 500
+        return jsonify({'error': 'AI 處理失敗，請檢查 Cloudflare Workers AI 設定或網絡連線'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
