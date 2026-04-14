@@ -15,6 +15,8 @@
         
         <textarea id="inputText" placeholder="輸入句子，例如：你好聰明啊"></textarea>
         
+        <div id="profanityCounter" class="profanity-counter">目前粗口：0 個</div>
+        
         <br>
         
         <button id="insertBtn" onclick="addProfanity()">增加粗口 🤬</button>
@@ -31,10 +33,19 @@
 </div>
 
 <script>
+    let profanityCount = 0;
+
+    // 用戶手動修改文字時重置計數
+    document.getElementById('inputText').addEventListener('input', function () {
+        profanityCount = 0;
+        document.getElementById('profanityCounter').textContent = '目前粗口：0 個';
+    });
+
     async function addProfanity() {
         const textArea = document.getElementById('inputText');
         const btn = document.getElementById('insertBtn');
         const loading = document.getElementById('loadingMsg');
+        const counter = document.getElementById('profanityCounter');
         const originalText = textArea.value;
 
         if (!originalText.trim()) {
@@ -51,14 +62,16 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ text: originalText }),
+                body: JSON.stringify({ text: originalText, profanity_count: profanityCount }),
             });
 
             const data = await response.json();
 
             if (data.result) {
-                addHistoryCard(originalText); // 將舊版本加入歷史紀錄
+                addHistoryCard(originalText, profanityCount); // 將舊版本加入歷史紀錄
                 textArea.value = data.result;
+                profanityCount++;
+                counter.textContent = `目前粗口：${profanityCount} 個`;
             } else if (data.error) {
                 alert("錯誤: " + data.error);
             }
@@ -73,7 +86,7 @@
         }
     }
 
-    function addHistoryCard(text) {
+    function addHistoryCard(text, count) {
         const list = document.getElementById('historyList');
         const card = document.createElement('div');
         card.className = 'history-card';
@@ -84,7 +97,7 @@
         
         const metaDiv = document.createElement('div');
         metaDiv.className = 'history-meta';
-        metaDiv.textContent = `字數: ${text.length}`;
+        metaDiv.textContent = `粗口：${count} 個`;
         
         card.appendChild(contentDiv);
         card.appendChild(metaDiv);
