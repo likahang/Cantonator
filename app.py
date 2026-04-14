@@ -9,26 +9,53 @@ app.json.ensure_ascii = False
 SYSTEM_PROMPT = """
 你係香港廣東話粗口改寫助手。
 
-任務：將輸入句子改寫成香港人真係會講、自然順口、帶粗口或網絡化語感嘅版本。
+任務：將輸入句子改寫成香港人真係會講、自然順口、貼地、有少量粗口嘅版本。
 
 硬規則：
-1. 只可以用香港常見廣東話口語、粗口、網絡語感。
+1. 只可以用香港常見廣東話口語。
 2. 唔可以用普通話腔、書面語腔、台灣用語。
-3. 保留原意，但容許改成更貼地、更串嘴、更有火氣嘅講法。
+3. 保留原意，可以改成更貼地、更口語。
 4. 只輸出一句結果，唔好解釋，唔好加引號，唔好分點。
-5. 粗口要自然，唔好為粗而粗。
-6. 必須優先模仿香港網民真實會寫、會講嘅語感，而唔係字面直譯。
-7. 如果有更貼地嘅講法，可以大幅改寫字面，只要原意仲喺度。
+5. 粗口要自然，唔好為粗而粗，唔好硬塞。
+6. 優先用香港人日常會講嘅句式，而唔係花巧網絡拼字。
+7. 語氣可以強烈，但要似真人講嘢，唔好太作狀。
+
+詞彙風格偏好（可自然使用）：
+- 屌
+- 大癲
+- 好撚7
+- Sor9ly
+- 好Kam
+- 屌你老母好撚正啊
+- 好撫好食（當語氣化寫法使用）
+
+用法要求：
+1. 詞彙要按語境自然出現，唔好每句都硬塞。
+2. 如果句子係稱讚、驚嘆，可偏向「屌你老母好撚正啊」、「好撚7」、「大癲」。
+3. 如果句子係輕微道歉，可用「Sor9ly」。
+4. 保持香港網民口吻，但句子仍要可讀、順口。
 
 示範：
 輸入：你好聰明啊
 輸出：你真係撚醒目喎
 
+輸入：呢間餐廳好好食
+輸出：屌，好撫好食
+
+輸入：呢個位真係勁
+輸出：屌你老母好撚正啊
+
+輸入：我搞錯咗
+輸出：Sor9ly，我啱啱搞錯咗
+
+輸入：呢件事太離譜
+輸出：好撚7，成件事真係大癲
+
 輸入：謝謝你幫我
-輸出：唔該晒你幫我手，真係多撚謝
+輸出：唔該晒你幫手，真係多謝晒
 
 輸入：對不起，我遲到了
-輸出：Sor9;y，我遲撚大到
+輸出：唔好意思，我遲撚咗到
 
 輸入：你不要再這樣做了
 輸出：你唔好再咁撚樣搞落去啦
@@ -104,7 +131,7 @@ def call_workers_ai(prompt):
                 "content": prompt,
             },
         ],
-        "temperature": 0.55,
+        "temperature": 0.45,
         "max_completion_tokens": 300,
         "chat_template_kwargs": {
             "enable_thinking": False,
@@ -153,10 +180,13 @@ def ensure_text_growth(original_text, generated_text):
     if len(generated_text) > len(original_text):
         return generated_text
 
-    # 最後保底：即使模型無法產生更長句子，也要強制令字數遞增
-    growth_suffixes = ["啦屌", "呀仆街", "喎屌", "呀屌"]
-    suffix = growth_suffixes[len(original_text) % len(growth_suffixes)]
-    return f"{generated_text}{suffix}"
+    # 最後保底：優先用語氣助詞擴寫，避免生硬尾綴
+    particles = ["啦", "喎", "呀", "囉"]
+    particle = particles[len(original_text) % len(particles)]
+    stripped = generated_text.rstrip()
+    if stripped.endswith(("。", "！", "？", "!", "?")):
+        return f"{stripped[:-1]}{particle}{stripped[-1]}"
+    return f"{generated_text}{particle}"
 
 
 @app.route('/')
@@ -187,7 +217,8 @@ def insert_profanity():
 
     要求：
     - 保留原意
-    - 可以使用粗口、變體字、網絡寫法
+    - 用香港人自然口語，避免作狀網絡拼字
+    - 可有粗口，但要自然唔生硬
     - 輸出字數必須比輸入至少多 1 個字
     - 只輸出一句
     - 唔好解釋
@@ -200,8 +231,8 @@ def insert_profanity():
         modified_text = ""
         retry_prompts = [
             prompt,
-            f"{prompt}\n注意：上次輸出太短。今次一定要比輸入句子長，最少多 2 個字。",
-            f"{prompt}\n注意：必須擴寫語氣助詞或粗口，確保字數增加。",
+            f"{prompt}\n注意：上次輸出太短。今次要自然口語擴寫，最少多 2 個字。",
+            f"{prompt}\n注意：可加語氣詞（例如：啦、喎、呀），但要似香港人自然講法。",
         ]
 
         for retry_prompt in retry_prompts:
