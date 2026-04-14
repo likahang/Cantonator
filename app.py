@@ -149,6 +149,16 @@ def call_workers_ai(prompt):
     raise RuntimeError(json.dumps(response_data, ensure_ascii=False))
 
 
+def ensure_text_growth(original_text, generated_text):
+    if len(generated_text) > len(original_text):
+        return generated_text
+
+    # 最後保底：即使模型無法產生更長句子，也要強制令字數遞增
+    growth_suffixes = ["啦屌", "呀仆街", "喎屌", "呀屌"]
+    suffix = growth_suffixes[len(original_text) % len(growth_suffixes)]
+    return f"{generated_text}{suffix}"
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -178,6 +188,7 @@ def insert_profanity():
     要求：
     - 保留原意
     - 可以使用粗口、變體字、網絡寫法
+    - 輸出字數必須比輸入至少多 1 個字
     - 只輸出一句
     - 唔好解釋
 
@@ -186,7 +197,21 @@ def insert_profanity():
     """
 
     try:
-        modified_text = call_workers_ai(prompt)
+        modified_text = ""
+        retry_prompts = [
+            prompt,
+            f"{prompt}\n注意：上次輸出太短。今次一定要比輸入句子長，最少多 2 個字。",
+            f"{prompt}\n注意：必須擴寫語氣助詞或粗口，確保字數增加。",
+        ]
+
+        for retry_prompt in retry_prompts:
+            candidate = call_workers_ai(retry_prompt)
+            if len(candidate) > len(user_text):
+                modified_text = candidate
+                break
+            modified_text = candidate
+
+        modified_text = ensure_text_growth(user_text, modified_text)
         return jsonify({'result': modified_text})
     except Exception as e:
         print(f"Error: {e}")
