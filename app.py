@@ -27,7 +27,6 @@ SYSTEM_PROMPT = """
 - Sor9ly
 - 好Kam
 - 屌你老母好撚正啊
-- 好撫好食（當語氣化寫法使用）
 
 用法要求：
 1. 詞彙要按語境自然出現，唔好每句都硬塞。
@@ -40,7 +39,7 @@ SYSTEM_PROMPT = """
 輸出：你真係撚醒目喎
 
 輸入：呢間餐廳好好食
-輸出：屌，好撫好食
+輸出：屌，真係好撚好食
 
 輸入：呢個位真係勁
 輸出：屌你老母好撚正啊
@@ -94,6 +93,11 @@ SYSTEM_PROMPT = """
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN")
 CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
 CLOUDFLARE_MODEL = os.environ.get("CLOUDFLARE_MODEL", "@cf/google/gemma-4-26b-a4b-it")
+
+NORMALIZATION_REPLACEMENTS = {
+    "好撫好食": "好好食",
+    "撫好食": "好食",
+}
 
 
 def get_missing_config():
@@ -189,6 +193,14 @@ def ensure_text_growth(original_text, generated_text):
     return f"{generated_text}{particle}"
 
 
+def normalize_generated_text(text):
+    # 修正模型偶發的怪字詞，避免不自然輸出
+    normalized = text
+    for wrong, right in NORMALIZATION_REPLACEMENTS.items():
+        normalized = normalized.replace(wrong, right)
+    return normalized
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -237,6 +249,7 @@ def insert_profanity():
 
         for retry_prompt in retry_prompts:
             candidate = call_workers_ai(retry_prompt)
+            candidate = normalize_generated_text(candidate)
             if len(candidate) > len(user_text):
                 modified_text = candidate
                 break
